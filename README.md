@@ -1,6 +1,6 @@
 # ⚡ Supervisório SCADA 230kV para Simulação (Diário de um Comissionador - Ep. 08)
 
-Sistema supervisório SCADA desenvolvido em Python para automação, monitoramento e controle de subestações de alta tensão (230kV), integrando lógicas de intertravamento e protocolos de comunicação do setor elétrico.
+Sistema supervisório para simulação SCADA desenvolvido em Python para automação, monitoramento e controle de subestações de alta tensão (230kV), integrando lógicas de intertravamento e protocolos de comunicação do setor elétrico.
 
 ## 🚀 Tecnologias e Ferramentas
 * **Linguagem:** Python
