@@ -27,8 +27,11 @@ class SubstationSCADAApp(ctk.CTk):
         self.title("Sistema SCADA / IEC 61850 - Subestação 230kV (Supervisório Completo)")
         self.geometry("1366x768")
         self.minsize(1024, 700)
+        
+        # Compatibilidade com PyInstaller no Windows
+        self.state("zoomed")
 
-        # Estados do Pátio: Disjuntores e Seccionadoras com Intertravamento Físico Rigoroso
+        # Estados do Pátio: Disjuntores e Seccionadoras
         self.bay_status = {
             "52L1": {"name": "Disjuntor 52L1 (Linha)", "closed": True, "voltage": 230.0, "poles": {"A": True, "B": True, "C": True}, "discrepancy": False, "current": 180.0, "latency": 3.2},
             "52L2": {"name": "Disjuntor 52L2 (Transferência)", "closed": False, "voltage": 230.0, "poles": {"A": False, "B": False, "C": False}, "discrepancy": False, "current": 0.0, "latency": 3.5},
@@ -116,11 +119,9 @@ class SubstationSCADAApp(ctk.CTk):
         ctk.CTkButton(btn_frame, text="Simular Discrepância de Polos (52L1)", fg_color="#d35400", command=self.trigger_pole_discrepancy).pack(side="left", padx=5)
 
     def is_bay_energized(self):
-        """Função unificada de validação topológica de energização do bay/transformador"""
         b1_closed = self.bay_status["52L1"]["closed"]
         b2_closed = self.bay_status["52L2"]["closed"]
         bp_closed = self.bay_status["89BP"]["closed"]
-        # O bay/TR1 só energiza se 52L1 estiver fechado OU se o bypass estiver fechado COM o disjuntor de transferência 52L2 fechado
         return b1_closed or (bp_closed and b2_closed)
 
     def draw_mimic_diagram(self):
@@ -140,7 +141,7 @@ class SubstationSCADAApp(ctk.CTk):
         energized_color = "#f1c40f" if self.animation_toggle else "#d4ac0d"
         deenergized_color = "#444444"
 
-        # 1. Barramento Principal 230kV (Linha Superior)
+        # 1. Barramento Principal 230kV
         c.create_line(width * 0.10, height * 0.08, width * 0.90, height * 0.08, fill=energized_color, width=5)
         c.create_text(width * 0.5, height * 0.03, text="BARRAMENTO PRINCIPAL 230kV [ENERGIZADO]", fill="#f1c40f", font=("Consolas", 10, "bold"))
 
@@ -173,12 +174,11 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_text(width * 0.65, height * 0.37, text=b2_text, fill="white", font=("Arial", 8, "bold"))
 
         # Seccionadora de Bypass (89BP)
-        bp_color = "#27ae60" if bp_closed else "#c0392b"
+        bp_color = "#27ae60" if bp_closed else "#e74c3c"
         bp_text = "89BP (FECHADA)" if bp_closed else "89BP (ABERTA)"
         c.create_rectangle(width * 0.16, height * 0.35, width * 0.27, height * 0.41, fill="#1f1f1f", outline=bp_color, width=2)
         c.create_text(width * 0.215, height * 0.38, text=bp_text, fill="white", font=("Arial", 7, "bold"))
 
-        # O ramal do bypass só ganha cor energizada se o barramento de transferência estiver ativo E o bypass fechado
         bp_line_color = energized_color if (bp_closed and transf_bar_active) else deenergized_color
         c.create_line(width * 0.65, height * 0.22, width * 0.215, height * 0.22, fill=bp_line_color, width=2, dash=(2,2))
         c.create_line(width * 0.215, height * 0.22, width * 0.215, height * 0.38, fill=bp_line_color, width=2, dash=(2,2))
@@ -187,17 +187,16 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_line(width * 0.35, height * 0.42, width * 0.35, height * 0.50, fill=line1_color, width=3)
         c.create_line(width * 0.65, height * 0.42, width * 0.65, height * 0.50, fill=line2_color, width=3)
         
-        # Validação topológica rigorosa do barramento inferior
         bus_inf_active = self.is_bay_energized()
         bus_inf_color = energized_color if bus_inf_active else deenergized_color
         
         c.create_line(width * 0.35, height * 0.50, width * 0.65, height * 0.50, fill=bus_inf_color, width=3)
         c.create_line(width * 0.5, height * 0.50, width * 0.5, height * 0.72, fill=bus_inf_color, width=3)
 
-        # Seccionadora Terra (89T1)
+        # Seccionadora Terra (89T1) - Cor corrigida (Verde = Fechada/Aterrada / Vermelho = Aberta)
         c.create_line(width * 0.5, height * 0.60, width * 0.60, height * 0.60, fill="#7f8c8d", width=2)
         
-        box_color = "#e74c3c" if b3_closed else "#27ae60"
+        box_color = "#27ae60" if b3_closed else "#e74c3c"
         box_text = "89T1 (TERRA FECHADA)" if b3_closed else "89T1 (TERRA ABERTA)"
         c.create_rectangle(width * 0.60, height * 0.56, width * 0.78, height * 0.64, fill="#1f1f1f", outline=box_color, width=2)
         c.create_text(width * 0.69, height * 0.60, text=box_text, fill="white", font=("Arial", 9, "bold"))
@@ -412,13 +411,13 @@ class SubstationSCADAApp(ctk.CTk):
         tree_text = (
             "📁 E230kV_Substation\n"
             " └─ 📁 Bay_L1 (230kV)\n"
-            "     ├─ 📄 XCBR1.Pos.stVal (Disjuntor Tripolar A/B/C)\n"
-            "     ├─ 📄 CSWI1.Pos.ctlModel (Controle Operacional / CILO Interlocks)\n"
-            "     ├─ 📄 MMXU1.A.phsA/B/C (Medição Fasorial de Corrente e Tensão)\n"
-            "     └─ 🌐 GOOSE Dataset (Latência de Publication: ~3.1ms)\n"
+            "    ├─ 📄 XCBR1.Pos.stVal (Disjuntor Tripolar A/B/C)\n"
+            "    ├─ 📄 CSWI1.Pos.ctlModel (Controle Operacional / CILO Interlocks)\n"
+            "    ├─ 📄 MMXU1.A.phsA/B/C (Medição Fasorial de Corrente e Tensão)\n"
+            "    └─ 🌐 GOOSE Dataset (Latência de Publication: ~3.1ms)\n"
             " └─ 📁 Bay_TR1 (230/13.8kV)\n"
-            "     ├─ 📄 PTOC1, PDIS1, RREC1, TTRC1 (Funções ANSI)\n"
-            "     └─ 🌐 GOOSE Trip Command (Latência de Rede: ~2.1ms)\n"
+            "    ├─ 📄 PTOC1, PDIS1, RREC1, TTRC1 (Funções ANSI)\n"
+            "    └─ 🌐 GOOSE Trip Command (Latência de Rede: ~2.1ms)\n"
         )
         tree_box.insert("0.0", tree_text)
         tree_box.configure(state="disabled")
@@ -471,7 +470,6 @@ class SubstationSCADAApp(ctk.CTk):
         bay["discrepancy"] = False
         bay["latency"] = round(random.uniform(2.8, 3.6), 1)
 
-        # Atualização unificada de corrente e tensão do transformador
         if self.is_bay_energized():
             self.transf_status["current"] = 180.0
             self.transf_status["voltage"] = 230.0
