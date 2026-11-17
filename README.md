@@ -25,7 +25,7 @@ Sistema supervisório para simulação SCADA desenvolvido em Python para automa�
 ### 5. Gráficos de Tendência Multi-Variável
 ![Gráficos de Tendência](assets/print5.png)
 
-### 6. Árvore de Nodos Lógicos IEC 61850
+### 6. Árvore de Nós Lógicos IEC 61850
 ![Nodos IEC 61850](assets/print6.png)
 
 ### 7. Logger de Sequência de Eventos (SOE)
