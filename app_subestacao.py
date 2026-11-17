@@ -193,7 +193,7 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_line(width * 0.35, height * 0.50, width * 0.65, height * 0.50, fill=bus_inf_color, width=3)
         c.create_line(width * 0.5, height * 0.50, width * 0.5, height * 0.72, fill=bus_inf_color, width=3)
 
-        # Seccionadora Terra (89T1) - Cor corrigida (Verde = Fechada/Aterrada / Vermelho = Aberta)
+        # Seccionadora Terra (89T1)
         c.create_line(width * 0.5, height * 0.60, width * 0.60, height * 0.60, fill="#7f8c8d", width=2)
         
         box_color = "#27ae60" if b3_closed else "#e74c3c"
@@ -201,7 +201,6 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_rectangle(width * 0.60, height * 0.56, width * 0.78, height * 0.64, fill="#1f1f1f", outline=box_color, width=2)
         c.create_text(width * 0.69, height * 0.60, text=box_text, fill="white", font=("Arial", 9, "bold"))
 
-        # Símbolo de Aterramento IEC
         c.create_line(width * 0.69, height * 0.64, width * 0.69, height * 0.70, fill="#bdc3c7", width=2)
         c.create_line(width * 0.65, height * 0.70, width * 0.73, height * 0.70, fill="#bdc3c7", width=2)
         c.create_line(width * 0.66, height * 0.72, width * 0.72, height * 0.72, fill="#bdc3c7", width=2)
@@ -501,6 +500,7 @@ class SubstationSCADAApp(ctk.CTk):
         self.log_soe(msg)
 
     def simulate_ansi_trip(self, ansi_code, description):
+        # Abertura do disjuntor principal por atuação de proteção ANSI
         self.transf_status["current"] = 0.0
         self.transf_status["voltage"] = 0.0
         self.transf_status["latency"] = 1.9
@@ -580,12 +580,13 @@ class SubstationSCADAApp(ctk.CTk):
         if str(self.tabview.get()) == "Diagrama Unifilar":
             self.draw_mimic_diagram()
 
+        # Correção aplicada: A telemetria e o gráfico agora respeitam estritamente a energização do bay
         if self.is_bay_energized():
-            curr_val = self.transf_status["current"] + random.uniform(-5, 5)
-            volt_val = self.transf_status["voltage"] + random.uniform(-0.1, 0.1)
+            curr_val = self.transf_status["current"] + random.uniform(-2, 2)
+            volt_val = self.transf_status["voltage"] + random.uniform(-0.05, 0.05)
         else:
             curr_val = 0.0
-            volt_val = 0.0
+            volt_val = 0.0  # Zera a tensão e corrente perfeitamente quando desenergizado
 
         self.y_curr.pop(0)
         self.y_curr.append(curr_val)
