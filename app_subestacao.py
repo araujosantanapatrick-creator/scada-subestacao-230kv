@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+Sistema Supervisório para simulação SCADA 230kV (Diário de um Comissionador - Ep. 08)
+Copyright (C) 2026 Patrick Araujo Santana
+
+Este arquivo é parte do projeto scada-subestacao-230kv.
+Este programa é um software livre: você pode redistribuí-lo e/ou modificá-lo
+sob os termos da Licença Pública Geral GNU (GPLv3) conforme publicada pela
+Free Software Foundation.
+"""
 import tkinter as tk
 from tkinter import ttk
 import customtkinter as ctk
