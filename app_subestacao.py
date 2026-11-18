@@ -9,12 +9,20 @@ sob os termos da Licença Pública Geral GNU (GPLv3) conforme publicada pela
 Free Software Foundation.
 """
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import customtkinter as ctk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import random
 from datetime import datetime
+import threading
+
+# Importações do Scapy para envio de pacotes brutos (GOOSE IEC 61850) no Windows com Npcap
+try:
+    from scapy.all import sendp, Ether, Raw, get_if_list
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
 
 # Configuração do Tema Global do CustomTkinter
 ctk.set_appearance_mode("Dark")
@@ -29,7 +37,10 @@ class SubstationSCADAApp(ctk.CTk):
         self.minsize(1024, 700)
         
         # Compatibilidade com PyInstaller no Windows
-        self.state("zoomed")
+        try:
+            self.state("zoomed")
+        except Exception:
+            pass
 
         # Estados do Pátio: Disjuntores e Seccionadoras
         self.bay_status = {
@@ -61,23 +72,60 @@ class SubstationSCADAApp(ctk.CTk):
         self.cursor_x1 = self.buffer_size - 20
         self.cursor_x2 = self.buffer_size - 10
 
+        # Combinação de nomes amigáveis do Windows + varredura do Scapy para evitar listas vazias
+        interfaces_padrao = ["Wi-Fi", "Ethernet", "Ethernet 0", "VMnet1", "VMnet8"]
+        if SCAPY_AVAILABLE:
+            try:
+                scapy_ifaces = get_if_list()
+                self.lista_interfaces = list(dict.fromkeys(interfaces_padrao + scapy_ifaces))
+            except Exception:
+                self.lista_interfaces = interfaces_padrao
+        else:
+            self.lista_interfaces = interfaces_padrao
+
+        default_iface = "Wi-Fi" if "Wi-Fi" in self.lista_interfaces else self.lista_interfaces[0]
+        self.interface_selecionada = ctk.StringVar(value=default_iface)
+
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
 
         self.create_header()
         self.create_tabview()
         self.update_telemetry()
+        
+        # Thread em segundo plano para envio de Heartbeats GOOSE (IEC 61850) para a VM em Bridge
+        self.running = True
+        self.thread_goose_hb = threading.Thread(target=self._loop_heartbeat_goose, daemon=True)
+        self.thread_goose_hb.start()
 
     def create_header(self):
-        header_frame = ctk.CTkFrame(self, height=50, corner_radius=0, fg_color=("#1f1f1f", "#141414"))
+        header_frame = ctk.CTkFrame(self, height=55, corner_radius=0, fg_color=("#1f1f1f", "#141414"))
         header_frame.grid(row=0, column=0, sticky="ew")
-        header_frame.grid_columnconfigure(1, weight=1)
+        header_frame.grid_columnconfigure(2, weight=1)
 
-        title_label = ctk.CTkLabel(header_frame, text="⚡ SUPERVISÓRIO SCADA 230kV — IEC 61850", font=ctk.CTkFont(size=16, weight="bold"))
-        title_label.grid(row=0, column=0, padx=20, pady=10, sticky="w")
+        title_label = ctk.CTkLabel(header_frame, text="⚡ SUPERVISÓRIO SCADA 230kV — IEC 61850", font=ctk.CTkFont(size=15, weight="bold"))
+        title_label.grid(row=0, column=0, padx=15, pady=10, sticky="w")
 
-        self.status_box = ctk.CTkLabel(header_frame, text="ESTADO: NORMAL (GOOSE ATIVO | Latência Média: 3.2ms)", text_color="#2ecc71", font=ctk.CTkFont(size=11, weight="bold"))
-        self.status_box.grid(row=0, column=2, padx=20, pady=10, sticky="e")
+        iface_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        iface_frame.grid(row=0, column=1, padx=10, pady=5)
+
+        lbl_iface = ctk.CTkLabel(iface_frame, text="Placa Rede:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#3498db")
+        lbl_iface.pack(side="left", padx=3)
+
+        # Usando CTkComboBox para permitir seleção e digitação livre do adaptador de rede
+        self.menu_iface = ctk.CTkComboBox(
+            iface_frame, 
+            values=self.lista_interfaces, 
+            variable=self.interface_selecionada,
+            width=160,
+            height=28,
+            font=ctk.CTkFont(size=11)
+        )
+        self.menu_iface.pack(side="left", padx=3)
+
+        status_txt = "ESTADO: NORMAL (GOOSE ATIVO | Npcap)" if SCAPY_AVAILABLE else "ESTADO: NORMAL (Simulação)"
+        self.status_box = ctk.CTkLabel(header_frame, text=status_txt, text_color="#2ecc71" if SCAPY_AVAILABLE else "#f39c12", font=ctk.CTkFont(size=11, weight="bold"))
+        self.status_box.grid(row=0, column=2, padx=15, pady=10, sticky="e")
 
     def create_tabview(self):
         self.tabview = ctk.CTkTabview(self, fg_color="#1a1a1a")
@@ -88,7 +136,7 @@ class SubstationSCADAApp(ctk.CTk):
         self.tab_prot = self.tabview.add("Proteção ANSI & TR1")
         self.tab_alarms = self.tabview.add("Painel de Alarmes")
         self.tab_trends = self.tabview.add("Gráficos de Tendência Multi-Variável")
-        self.tab_nodes = self.tabview.add("Nodos IEC 61850")
+        self.tab_nodes = self.tabview.add("Nós IEC 61850")
         self.tab_soe = self.tabview.add("Logger SOE")
 
         self.build_mimic_tab()
@@ -141,11 +189,9 @@ class SubstationSCADAApp(ctk.CTk):
         energized_color = "#f1c40f" if self.animation_toggle else "#d4ac0d"
         deenergized_color = "#444444"
 
-        # 1. Barramento Principal 230kV
         c.create_line(width * 0.10, height * 0.08, width * 0.90, height * 0.08, fill=energized_color, width=5)
         c.create_text(width * 0.5, height * 0.03, text="BARRAMENTO PRINCIPAL 230kV [ENERGIZADO]", fill="#f1c40f", font=("Consolas", 10, "bold"))
 
-        # 2. Barramento de Transferência 230kV
         transf_bar_active = b2_closed
         transf_bar_color = energized_color if transf_bar_active else deenergized_color
         transf_bar_text_status = "ENERGIZADO" if transf_bar_active else "DESENERGIZADO"
@@ -160,20 +206,17 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_line(width * 0.35, height * 0.08, width * 0.35, height * 0.32, fill=line1_color, width=3)
         c.create_line(width * 0.65, height * 0.22, width * 0.65, height * 0.32, fill=line2_color, width=3)
 
-        # Disjuntor 52L1
         b1_disc = self.bay_status["52L1"]["discrepancy"]
         b1_color = "#e74c3c" if b1_disc else ("#27ae60" if b1_closed else "#c0392b")
         b1_text = "52L1 (DISCR.)" if b1_disc else ("52L1 (FECH.)" if b1_closed else "52L1 (ABERTO)")
         c.create_rectangle(width * 0.29, height * 0.32, width * 0.41, height * 0.42, fill=b1_color, outline="white", width=2)
         c.create_text(width * 0.35, height * 0.37, text=b1_text, fill="white", font=("Arial", 8, "bold"))
 
-        # Disjuntor 52L2 (Transferência)
         b2_color = "#27ae60" if b2_closed else "#c0392b"
         b2_text = "52L2 (FECH.)" if b2_closed else "52L2 (ABERTO)"
         c.create_rectangle(width * 0.59, height * 0.32, width * 0.71, height * 0.42, fill=b2_color, outline="white", width=2)
         c.create_text(width * 0.65, height * 0.37, text=b2_text, fill="white", font=("Arial", 8, "bold"))
 
-        # Seccionadora de Bypass (89BP)
         bp_color = "#27ae60" if bp_closed else "#e74c3c"
         bp_text = "89BP (FECHADA)" if bp_closed else "89BP (ABERTA)"
         c.create_rectangle(width * 0.16, height * 0.35, width * 0.27, height * 0.41, fill="#1f1f1f", outline=bp_color, width=2)
@@ -193,7 +236,6 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_line(width * 0.35, height * 0.50, width * 0.65, height * 0.50, fill=bus_inf_color, width=3)
         c.create_line(width * 0.5, height * 0.50, width * 0.5, height * 0.72, fill=bus_inf_color, width=3)
 
-        # Seccionadora Terra (89T1)
         c.create_line(width * 0.5, height * 0.60, width * 0.60, height * 0.60, fill="#7f8c8d", width=2)
         
         box_color = "#27ae60" if b3_closed else "#e74c3c"
@@ -206,7 +248,6 @@ class SubstationSCADAApp(ctk.CTk):
         c.create_line(width * 0.66, height * 0.72, width * 0.72, height * 0.72, fill="#bdc3c7", width=2)
         c.create_line(width * 0.67, height * 0.74, width * 0.71, height * 0.74, fill="#bdc3c7", width=1)
 
-        # Transformador TR1
         tr_color = energized_color if bus_inf_active else deenergized_color
         tr_text_status = "ENERGIZADO" if bus_inf_active else "DESENERGIZADO"
         current_val = self.transf_status['current'] if bus_inf_active else 0.0
@@ -402,7 +443,7 @@ class SubstationSCADAApp(ctk.CTk):
         tab.grid_rowconfigure(1, weight=1)
         tab.grid_columnconfigure(0, weight=1)
 
-        ctk.CTkLabel(tab, text="Árvore de Nodos Lógicos IEC 61850 (Subestação 230kV)", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, pady=10)
+        ctk.CTkLabel(tab, text="Árvore de Nós Lógicos IEC 61850 (Subestação 230kV)", font=ctk.CTkFont(size=14, weight="bold")).grid(row=0, column=0, pady=10)
 
         tree_box = ctk.CTkTextbox(tab, font=ctk.CTkFont(family="Consolas", size=11), fg_color="#111111")
         tree_box.grid(row=1, column=0, sticky="nsew", padx=15, pady=10)
@@ -433,8 +474,109 @@ class SubstationSCADAApp(ctk.CTk):
         self.soe_box.insert("0.0", f"[{datetime.now().strftime('%H:%M:%S.000')}] [SOE] Inicialização completa dos relés ANSI e lógica CILO.\n")
         self.soe_box.configure(state="disabled")
 
+    def enviar_pacote_goose(self, evento, status):
+        """Injeta um quadro Ethernet GOOSE real (IEC 61850-8-1 com cabeçalho fixo e ASN.1 BER) via Scapy e Npcap"""
+        if not SCAPY_AVAILABLE:
+            return
+        try:
+            def ber_len(length):
+                if length < 128:
+                    return bytes([length])
+                elif length < 256:
+                    return bytes([0x81, length])
+                else:
+                    return bytes([0x82, length >> 8, length & 0xFF])
+
+            def ber_tlv(tag_bytes, value_bytes):
+                return tag_bytes + ber_len(len(value_bytes)) + value_bytes
+
+            val_bool = False if "ABERTO" in status or "ALERTA" in status or "TRIP" in status else True
+            
+            gocb_ref = ber_tlv(b'\x80', b"E230kV_Substation/LLN0$GO$gcb01")
+            time_live = ber_tlv(b'\x81', b'\x07\xd0')
+            dat_set = ber_tlv(b'\x82', b"E230kV_Substation/LLN0$DS_Bay")
+            go_id = ber_tlv(b'\x83', evento.encode('ascii'))
+            
+            import time
+            t_val = int(time.time()) + 2208988800
+            utc_bytes = t_val.to_bytes(4, 'big') + b'\x00\x00\x00\x00'
+            t_elem = ber_tlv(b'\x84', utc_bytes)
+            
+            st_num = ber_tlv(b'\x85', b'\x01')
+            sq_num = ber_tlv(b'\x86', b'\x01')
+            sim_elem = ber_tlv(b'\x87', b'\x00')
+            conf_rev = ber_tlv(b'\x88', b'\x01')
+            nds_com = ber_tlv(b'\x89', b'\x00')
+            num_entries = ber_tlv(b'\x8A', b'\x01')
+            
+            bool_val_bytes = b'\xff' if val_bool else b'\x00'
+            data_bool = ber_tlv(b'\x80', bool_val_bytes)
+            all_data_seq = ber_tlv(b'\x30', data_bool)
+            all_data = ber_tlv(b'\xAB', all_data_seq)
+            
+            pdu_content = gocb_ref + time_live + dat_set + go_id + t_elem + st_num + sq_num + sim_elem + conf_rev + nds_com + num_entries + all_data
+            goose_pdu = ber_tlv(b'\x61', pdu_content)
+            
+            pdu_total_len = len(goose_pdu) + 8
+            fixed_header = b'\x00\x01' + pdu_total_len.to_bytes(2, 'big') + b'\x00\x00\x00\x00'
+            
+            payload_completo = fixed_header + goose_pdu
+
+            ether_frame = Ether(dst="01:0c:cd:01:00:00", type=0x88B8) / Raw(load=payload_completo)
+            
+            interface_escolhida = self.interface_selecionada.get().strip()
+            if interface_escolhida:
+                sendp(ether_frame, iface=interface_escolhida, verbose=False)
+        except Exception:
+            pass
+
+    def _loop_heartbeat_goose(self):
+        while self.running:
+            time.sleep(2.0)
+            if SCAPY_AVAILABLE:
+                try:
+                    def ber_len(length):
+                        if length < 128: return bytes([length])
+                        elif length < 256: return bytes([0x81, length])
+                        else: return bytes([0x82, length >> 8, length & 0xFF])
+                    def ber_tlv(tag_bytes, value_bytes): return tag_bytes + ber_len(len(value_bytes)) + value_bytes
+
+                    gocb_ref = ber_tlv(b'\x80', b"E230kV_Substation/LLN0$GO$gcb01")
+                    time_live = ber_tlv(b'\x81', b'\x07\xd0')
+                    dat_set = ber_tlv(b'\x82', b"E230kV_Substation/LLN0$DS_Bay")
+                    go_id = ber_tlv(b'\x83', b"HEARTBEAT")
+                    
+                    import time
+                    t_val = int(time.time()) + 2208988800
+                    utc_bytes = t_val.to_bytes(4, 'big') + b'\x00\x00\x00\x00'
+                    t_elem = ber_tlv(b'\x84', utc_bytes)
+                    
+                    st_num = ber_tlv(b'\x85', b'\x01')
+                    sq_num = ber_tlv(b'\x86', b'\x01')
+                    sim_elem = ber_tlv(b'\x87', b'\x00')
+                    conf_rev = ber_tlv(b'\x88', b'\x01')
+                    nds_com = ber_tlv(b'\x89', b'\x00')
+                    num_entries = ber_tlv(b'\x8A', b'\x01')
+                    
+                    data_bool = ber_tlv(b'\x80', b'\xff')
+                    all_data_seq = ber_tlv(b'\x30', data_bool)
+                    all_data = ber_tlv(b'\xAB', all_data_seq)
+                    
+                    pdu_content = gocb_ref + time_live + dat_set + go_id + t_elem + st_num + sq_num + sim_elem + conf_rev + nds_com + num_entries + all_data
+                    goose_pdu = ber_tlv(b'\x61', pdu_content)
+                    
+                    pdu_total_len = len(goose_pdu) + 8
+                    fixed_header = b'\x00\x01' + pdu_total_len.to_bytes(2, 'big') + b'\x00\x00\x00\x00'
+                    payload_completo = fixed_header + goose_pdu
+
+                    ether_frame = Ether(dst="01:0c:cd:01:00:00", type=0x88B8) / Raw(load=payload_completo)
+                    interface_escolhida = self.interface_selecionada.get().strip()
+                    if interface_escolhida:
+                        sendp(ether_frame, iface=interface_escolhida, verbose=False)
+                except Exception:
+                    pass
+
     def execute_command(self, bay_id, should_close):
-        # 1. Regra de Intertravamento: Fechar seccionadora de terra (89T1) com circuito energizado
         if should_close and bay_id == "89T1":
             if self.is_bay_energized() or self.bay_status["89BP"]["closed"]:
                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -443,7 +585,6 @@ class SubstationSCADAApp(ctk.CTk):
                 self.log_soe(msg)
                 return
 
-        # 2. Regra de Intertravamento: Fechar seccionadora de bypass (89BP) com barra de transferência morta
         if should_close and bay_id == "89BP":
             if not self.bay_status["52L2"]["closed"]:
                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -452,7 +593,6 @@ class SubstationSCADAApp(ctk.CTk):
                 self.log_soe(msg)
                 return
 
-        # 3. Regra de Intertravamento: Abrir seccionadora de bypass (89BP) sob carga sem retorno pelo disjuntor principal
         if not should_close and bay_id == "89BP":
             if self.is_bay_energized() and not self.bay_status["52L1"]["closed"]:
                 timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -478,6 +618,9 @@ class SubstationSCADAApp(ctk.CTk):
 
         self.draw_mimic_diagram()
         self.update_control_buttons_visual()
+        
+        self.enviar_pacote_goose(evento=f"POS_{bay_id}", status=status_str)
+
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         msg = f"[{timestamp}] COMANDO: {bay['name']} comutado para {status_str} | Latência GOOSE/MMS: {bay['latency']}ms.\n"
         self.log_alarm(msg)
@@ -493,6 +636,9 @@ class SubstationSCADAApp(ctk.CTk):
 
         self.draw_mimic_diagram()
         self.update_control_buttons_visual()
+        
+        self.enviar_pacote_goose(evento="DISCREPANCIA_POLOS_52L1", status="ALERTA")
+
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         msg = f"[{timestamp}] ALARME CRÍTICO: Discrepância de Polos no Disjuntor 52L1 (Fase B aberta em desacordo) [230kV]!\n"
         self.status_box.configure(text="ESTADO: ALARME DE DISCREPÂNCIA DE POLOS", text_color="#e74c3c")
@@ -500,7 +646,6 @@ class SubstationSCADAApp(ctk.CTk):
         self.log_soe(msg)
 
     def simulate_ansi_trip(self, ansi_code, description):
-        # Abertura do disjuntor principal por atuação de proteção ANSI
         self.transf_status["current"] = 0.0
         self.transf_status["voltage"] = 0.0
         self.transf_status["latency"] = 1.9
@@ -512,6 +657,8 @@ class SubstationSCADAApp(ctk.CTk):
         self.lbl_prot_status.configure(text=f"TRIP ATUADO: ANSI {ansi_code} ({description})!", text_color="#e74c3c")
         self.draw_mimic_diagram()
         self.update_control_buttons_visual()
+
+        self.enviar_pacote_goose(evento=f"TRIP_ANSI_{ansi_code}", status="ATIVO")
 
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         msg = f"[{timestamp}] PROTEÇÃO: Atuação da Função ANSI [{ansi_code} - {description}] | Disjuntor 52L1 Aberto por GOOSE (Corrente e Tensão Zeradas).\n"
@@ -534,10 +681,13 @@ class SubstationSCADAApp(ctk.CTk):
         self.transf_status["voltage"] = 230.0
         self.transf_status["latency"] = 3.0
         self.lbl_prot_status.configure(text="Relés ANSI (50/51, 21, 87T, 67, 25, 59): OPERANDO DENTRO DOS LIMITES", text_color="#2ecc71")
-        self.status_box.configure(text="ESTADO: NORMAL (GOOSE ATIVO | 230kV)", text_color="#2ecc71")
+        status_txt = "ESTADO: NORMAL (GOOSE ATIVO | VM Bridge Npcap)" if SCAPY_AVAILABLE else "ESTADO: NORMAL (GOOSE ATIVO | 230kV)"
+        self.status_box.configure(text=status_txt, text_color="#2ecc71")
         self.draw_mimic_diagram()
         self.update_control_buttons_visual()
         
+        self.enviar_pacote_goose(evento="RESTABELECIMENTO_PATIO", status="NORMAL")
+
         timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
         msg = f"[{timestamp}] INFO: Subestação de 230kV restabelecida aos parâmetros nominais.\n"
         self.log_alarm(msg)
@@ -580,13 +730,12 @@ class SubstationSCADAApp(ctk.CTk):
         if str(self.tabview.get()) == "Diagrama Unifilar":
             self.draw_mimic_diagram()
 
-        # Correção aplicada: A telemetria e o gráfico agora respeitam estritamente a energização do bay
         if self.is_bay_energized():
             curr_val = self.transf_status["current"] + random.uniform(-2, 2)
             volt_val = self.transf_status["voltage"] + random.uniform(-0.05, 0.05)
         else:
             curr_val = 0.0
-            volt_val = 0.0  # Zera a tensão e corrente perfeitamente quando desenergizado
+            volt_val = 0.0
 
         self.y_curr.pop(0)
         self.y_curr.append(curr_val)

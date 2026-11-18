@@ -1,0 +1,13 @@
+# Ignorar pastas de build e executáveis do PyInstaller
+build/
+dist/
+*.spec
+
+# Ignorar arquivos de cache do Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configurações locais de IDE
+.vscode/
