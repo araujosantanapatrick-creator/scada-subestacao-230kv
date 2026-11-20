@@ -1,5 +1,5 @@
 # ⚡ Supervisório para Simulação SCADA 230kV (Diário de um Comissionador - Ep. 08)
-[![Baixar Executável](https://img.shields.io/badge/Download-app__subestacao.exe-blue?style=for-the-badge&logo=windows)](https://github.com/araujosantanapatrick-creator/scada-subestacao-230kv/releases/download/v1.10/app_subestacao.exe)
+[![Baixar Executável](https://img.shields.io/badge/Download-app__subestacao.zip-blue?style=for-the-badge&logo=windows)](https://github.com/araujosantanapatrick-creator/scada-subestacao-230kv/releases/download/v1.10/app_subestacao.zip)
 Sistema supervisório para simulação SCADA desenvolvido em Python para automação, monitoramento e controle de subestações de alta tensão (230kV), integrando lógicas de intertravamento e protocolos de comunicação do setor elétrico.
 
 ## 🚀 Tecnologias e Ferramentas
