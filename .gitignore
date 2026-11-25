@@ -1,6 +1,10 @@
-﻿build/
+﻿__pycache__/
+*.pyc
+build/
+build_py/
 dist/
 *.spec
-__pycache__/
-*.py[cod]
-.venv/
+
+*.exe
+*.dll
+libiec61850/
