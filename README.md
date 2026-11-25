@@ -64,7 +64,7 @@ Sistema supervisório para simulação SCADA de subestação de alta tensão (23
 ![IEDScout GOOSE stNum e sqNum](assets/12-iedscout-goose-stnum.png)
 
 ### 13. Logger SOE e Tendência de Proteção / Frequência (Hz)
-![SOE e Tendência ANSI](assets/13-soe-tendencia-ansi.png)
+| `assets/13-soe-tendencia-ansi.png` | **Logger SOE (Comandos Remotos IEDScout) e Gráficos de Tendência:** Registro cronológico no Logger SOE dos comandos de abertura e fechamento enviados remotamente pelo OMICRON IEDScout via MMS/UDP no disjuntor `52L1`, acompanhado pelos gráficos de tendência em tempo real. |
 
 ## 📂 Estrutura do Projeto (`C:\SCADA_230kV`)
 
