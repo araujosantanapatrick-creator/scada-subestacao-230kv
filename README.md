@@ -2,7 +2,7 @@
 
 [![Download v1.1.0](https://img.shields.io/badge/Download-v1.1.0_(3_partes_.rar)-2ea44f?style=for-the-badge&logo=github)](https://github.com/araujosantanapatrick-creator/scada-subestacao-230kv/releases/tag/v1.1.0)
 
-> **Nota de Instalação (1.1.0):** Baixe as **3 partes .rar** (SCADA_230kV_v1.1.0.part1.rar, part2.rar e part3.rar) na página da release e extraia a primeira parte com o **WinRAR** para obter SCADA_230kV.zip.
+> **Nota de Instalação (v1.1.0):** Baixe as **3 partes .rar** (SCADA_230kV_v1.1.0.part1.rar, part2.rar e part3.rar) na página da release e extraia a primeira parte com o **WinRAR** para obter SCADA_230kV.zip.
 
 Sistema supervisório para simulação SCADA de subestação de alta tensão (230kV) desenvolvido em **Python** e **C (`libiec61850`)**, integrando lógicas de intertravamento **CILO**, funções de proteção **ANSI** (incluindo **81U** e **81O**), servidor **MMS** em C com ponte **UDP**, publicação **GOOSE** em Layer 2 (`0x88B8`), transmissão **Sampled Values** (`0x88BA`) e diagnóstico de rede via **Scapy / Npcap** e **OMICRON IEDScout**.
 
